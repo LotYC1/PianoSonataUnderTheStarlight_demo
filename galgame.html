@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Galgame - 本地资源版</title>
+    <style>
+        /* --- 全局设置 --- */
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            /* 字体设置：优先使用宋体/衬线体 */
+            font-family: "Source Han Serif CN", "Noto Serif SC", "Songti SC", "SimSun", serif; 
+            user-select: none;
+        }
+
+        #game-stage {
+            position: relative;
+            width: 1280px;
+            height: 720px;
+            margin: 0 auto;
+            top: 50%;
+            transform: translateY(-50%);
+            background-color: #000; /* 默认黑色背景，没加载图片时显示这个 */
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        /* --- 背景层 --- */
+        #background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-size: cover;
+            background-position: center;
+            transition: background-image 1s ease-in-out;
+            z-index: 1;
+            /* 滤镜：稍微压暗，增加怀旧感 */
+            filter: brightness(0.9) sepia(0.1); 
+        }
+
+        /* --- 立绘层 --- */
+        #character-layer {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 2;
+            display: flex;
+            justify-content: center;
+            align-items: flex-end;
+        }
+
+        .character-sprite {
+            max-height: 90%;
+            filter: drop-shadow(2px 4px 6px rgba(0,0,0,0.3));
+            transition: opacity 0.5s, transform 0.5s;
+        }
+
+        /* --- 章节显示框 (便签风格) --- */
+        #chapter-box {
+            position: absolute;
+            top: 40px;
+            left: 40px;
+            z-index: 15;
+            background-color: #fffef8;
+            color: #3d3d3d;
+            padding: 10px 35px;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            border: 1px solid #dcdcdc;
+            border-left: 4px solid #8b4513;
+            box-shadow: 2px 3px 10px rgba(0,0,0,0.15);
+            transform: rotate(-1deg);
+            transition: opacity 0.5s;
+        }
+
+        #chapter-box::before {
+            content: '';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%) rotate(2deg);
+            width: 60px;
+            height: 18px;
+            background: rgba(255, 255, 255, 0.4);
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            border-left: 1px solid rgba(255,255,255,0.2);
+            border-right: 1px solid rgba(255,255,255,0.2);
+        }
+
+        /* --- 选项层 (纸条风格) --- */
+        #choice-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(3px);
+            z-index: 20;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 30px;
+        }
+
+        .choice-btn {
+            width: 550px;
+            padding: 20px 30px;
+            background-color: #fdfbf7;
+            background-image: linear-gradient(#e8e8e8 1px, transparent 0);
+            background-size: 100% 1.5em; 
+            color: #4a4a4a;
+            font-family: inherit;
+            font-size: 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            border: 1px solid #dcdcdc;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+            transform: rotate(-1deg);
+        }
+        
+        .choice-btn:nth-child(even) { transform: rotate(1deg); }
+
+        .choice-btn:hover {
+            transform: scale(1.05) rotate(0deg);
+            background-color: #fff;
+            color: #8b4513;
+            box-shadow: 0 14px 28px rgba(0,0,0,0.25);
+            border-color: #8b4513;
+        }
+
+        /* --- UI 层 (笔记本风格) --- */
+        #ui-layer {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 88%;
+            height: 230px;
+            z-index: 10;
+            cursor: pointer;
+        }
+
+        #dialogue-box {
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            padding: 50px 60px 30px 60px;
+            background-color: #fdfbf7;
+            /* 噪点纹理SVG */
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.05'/%3E%3C/svg%3E");
+            border-radius: 2px 20px 2px 25px;
+            box-shadow: 5px 5px 0 #f0efe9, 10px 10px 0 #e6e4dc, 15px 15px 20px rgba(0,0,0,0.3);
+            border: 1px solid #d4d0c7;
+            position: relative;
+        }
+
+        #dialogue-box::before {
+            content: '';
+            position: absolute;
+            left: 20px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            border-left: 2px dashed #ccc;
+        }
+
+        #name-box {
+            position: absolute;
+            top: -50px;
+            left: 40px;
+            background-color: #e8dcc5;
+            color: #5e4b35;
+            padding: 8px 30px;
+            font-weight: bold;
+            font-size: 22px;
+            letter-spacing: 2px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            transform: rotate(-2deg);
+            border-radius: 2px 10px 2px 10px;
+            display: none;
+            z-index: 12;
+        }
+        
+        #name-box::after {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40%;
+            height: 15px;
+            background: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 2px rgba(0,0,0,0.1);
+        }
+
+        #text-content {
+            font-size: 26px;
+            line-height: 1.8;
+            color: #2b2b2b;
+            font-weight: 500;
+            margin-top: 5px;
+            text-shadow: 1px 1px 0 rgba(255,255,255,0.5);
+        }
+
+        /* 钢笔头光标 */
+        .typing-cursor::after {
+            content: '✒';
+            font-size: 20px;
+            margin-left: 5px;
+            color: #8b4513;
+            animation: blink 1s infinite;
+            vertical-align: middle;
+        }
+
+        #next-indicator {
+            position: absolute;
+            bottom: 15px;
+            right: 15px;
+            width: 0;
+            height: 0;
+            border-style: solid;
+            border-width: 0 0 30px 30px;
+            border-color: transparent transparent #8b4513 transparent;
+            opacity: 0.6;
+            animation: breath 1.5s infinite ease-in-out;
+        }
+
+        /* --- 动画关键帧 --- */
+        @keyframes breath {
+            0%, 100% { opacity: 0.3; transform: translateY(0); }
+            50% { opacity: 0.8; transform: translateY(-3px); }
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        .anim-slide-left { animation: slideInLeft 0.5s ease-out forwards; }
+        @keyframes slideInLeft { from { transform: translateX(-50px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .anim-jump { animation: jump 0.3s ease; }
+        @keyframes jump { 0% { transform: translateY(0); } 50% { transform: translateY(-20px); } 100% { transform: translateY(0); } }
+        .anim-shake { animation: shake 0.4s ease; }
+        @keyframes shake { 0% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } 100% { transform: translateX(0); } }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-stage">
+        <!-- 章节栏 -->
+        <div id="chapter-box"></div>
+
+        <!-- 背景 -->
+        <div id="background"></div>
+        
+        <!-- 立绘 -->
+        <div id="character-layer">
+            <img id="character-img" src="" alt="Character" style="display: none;" class="character-sprite">
+        </div>
+        
+        <!-- 选项层 -->
+        <div id="choice-layer"></div>
+
+        <!-- 对话框 -->
+        <div id="ui-layer" onclick="handleClick()">
+            <div id="name-box"></div>
+            <div id="dialogue-box">
+                <div id="text-content"></div>
+                <div id="next-indicator"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // =======================================================
+        // 配置区域：请在此处配置你的本地图片路径
+        // 建议在html文件同级目录下建立一个 images 文件夹
+        // =======================================================
+        const ASSETS = {
+            // 【背景图】 - 请填入相对路径，如 'images/bg_stage.jpg'
+            bg_stage_dark: 'images/stage.png',     // 序章：全黑，只有画面中央模糊的一束聚光灯
+            bg_school_sunset: 'images/school_corridor_sunset.png',  // 第一章：放学后的走廊，夕阳将走廊染成橘红色
+
+            // 【人物立绘】
+            char_hinata_happy: 'images/hinata_happy.png',       // 夏川日向：笑容灿烂，制服领结系得有点歪
+            char_hinata_sad: 'images/hinata_sad.png',           // 夏川日向：表情悲伤
+        };
+
+        // =======================================================
+        // 剧本区域
+        // =======================================================
+        const script = [
+            // --- Chapter 00: 序章 ---
+            {
+                chapter: '序章：灰色的八十八键',
+                name: null, 
+                text: '每个人的人生都有一首主题曲。',
+                bg: ASSETS.bg_stage_dark, // 引用上面的图片变量
+                char: "hide"
+            },
+            {
+                name: null,
+                text: '有的人是激昂的进行曲，有的人是温暖的摇篮曲。',
+                bg: null
+            },
+            {
+                name: null,
+                text: '而属于我的那首曲子，早在七年前的那个冬天，就在那个空荡荡的舞台上戛然而止了。'
+            },
+            {
+                name: null,
+                text: '那是被称作“神童”的神崎遥最后的演出。'
+            },
+            {
+                name: null,
+                text: '从那天起，我也好，钢琴也好，都像是坏掉的时钟，永远停在了那个时刻。'
+            },
+            {
+                name: null,
+                text: '我以为只要我不去触碰，那个伤口就会结痂，被时间掩埋。'
+            },
+            {
+                name: null,
+                text: '直到————那个总是试图拨动我停滞时间的家伙出现。'
+            },
+
+            // --- Chapter 01: 第一章 ---
+            {
+                chapter: '青梅竹马的“共犯”',
+                name: null,
+                text: '……放学了啊。 还是像往常一样，直接回家吧。',
+                bg: ASSETS.bg_school_sunset, // 切换背景
+                char: "hide"
+            },
+            {
+                name: "???",
+                text: '小——遥——！！',
+                bg: null
+            },
+            {
+                name: null,
+                text: '我不由得叹了口气，转过身来'
+            },
+            {
+                name: "夏川日向",
+                text: '「果然在这里！我就知道你会躲在这个没什么人的楼梯口发呆」',
+                char: ASSETS.char_hinata_happy, // 显示立绘
+                anim: "anim-slide-left" // 动画：左侧滑入
+            },
+            {
+                name: "神崎遥",
+                text: '「日向……在学校里能不能别叫我‘小遥’？我已经不是小学生了」',
+                bg: null
+            },
+            {
+                name: null,
+                text: '夏川日向。'
+            },
+            {
+                name: null,
+                text: '从穿尿布时期就在一起的青梅竹马。'
+            },
+            {
+                name: null,
+                text: '她是我这灰暗高中生活里，唯一一抹过于刺眼的亮色。'
+            },
+            {
+                name: "夏川日向",
+                text: '「有什么关系嘛。呐，遥，今天不用去打工吧？」',
+                anim: "anim-jump" // 动画：跳跃
+            },
+            {
+                name: "神崎遥",
+                text: '「不用。但我也不打算去陪你逛街或者排队买限定布丁……」'
+            },
+            {
+                name: "夏川日向",
+                text: '「不是那些事。遥……能不能把今天的时间借给我？就一会儿。我有一定要带你去的地方。」',
+                char: ASSETS.char_hinata_sad, // 显示立绘
+                anim: "anim-shake" // 动画：摇晃
+            },
+            {
+                name: "神崎遥",
+                text: '「……这么严肃？」'
+            },
+            {
+                name: "神崎遥",
+                text: '……'
+            },
+            {
+                name: "神崎遥",
+                text: '「好吧，反正也没什么事，就陪你去看看。」'
+            },
+            {
+                name: null,
+                text: '—— 待续 ——',
+                bg: '#000',
+                char: 'hide'
+            }
+        ];
+
+        // =======================================================
+        // 游戏引擎逻辑 (无需修改)
+        // =======================================================
+        let currentLineIndex = 0;
+        let isWaitingForChoice = false;
+        let isTyping = false;
+        let typingTimer = null;
+        let currentFullText = "";
+        let typingIndex = 0;
+        const typingSpeed = 40;
+
+        const bgElement = document.getElementById('background');
+        const charElement = document.getElementById('character-img');
+        const nameBox = document.getElementById('name-box');
+        const textBox = document.getElementById('text-content');
+        const uiLayer = document.getElementById('ui-layer');
+        const choiceLayer = document.getElementById('choice-layer');
+        const indicator = document.getElementById('next-indicator');
+        const chapterBox = document.getElementById('chapter-box');
+
+        function handleClick() {
+            if (isWaitingForChoice) return;
+            
+            if (isTyping) {
+                finishTypingImmediately();
+                return;
+            }
+            
+            if (currentLineIndex >= script.length) {
+                loadSceneByIndex(0);
+                return;
+            }
+
+            const currentObj = script[currentLineIndex];
+            if (currentObj && currentObj.nextId) {
+                jumpToId(currentObj.nextId);
+            } else {
+                loadSceneByIndex(currentLineIndex + 1);
+            }
+        }
+
+        function loadSceneByIndex(index) {
+            currentLineIndex = index;
+            const data = script[index];
+            if (!data) return;
+
+            if (data.type === 'choice') {
+                isWaitingForChoice = true;
+                showChoices(data.choices);
+                indicator.style.display = 'none';
+                return;
+            }
+
+            isWaitingForChoice = false;
+            choiceLayer.style.display = 'none';
+            indicator.style.display = 'block';
+
+            if (data.chapter) {
+                chapterBox.innerText = data.chapter;
+                chapterBox.style.opacity = 0;
+                setTimeout(() => { chapterBox.style.opacity = 1; }, 100);
+            }
+
+            if (data.name) {
+                nameBox.style.display = 'block';
+                nameBox.innerText = data.name;
+            } else {
+                nameBox.style.display = 'none';
+            }
+
+            // 背景处理 (兼容空字符串，如果是空字符串则不更新)
+            if (data.bg) {
+                if (data.bg.startsWith('#')) {
+                    bgElement.style.backgroundImage = 'none';
+                    bgElement.style.backgroundColor = data.bg;
+                } else {
+                    bgElement.style.backgroundImage = `url('${data.bg}')`;
+                }
+            }
+
+            if (data.char === "hide") {
+                charElement.style.display = 'none';
+            } else if (data.char) {
+                charElement.style.display = 'block';
+                charElement.src = data.char;
+            }
+            
+            charElement.className = 'character-sprite'; 
+            void charElement.offsetWidth; 
+            if (data.anim) charElement.classList.add(data.anim);
+
+            startTyping(data.text);
+        }
+
+        function startTyping(text) {
+            currentFullText = text || "";
+            textBox.innerHTML = "";
+            textBox.classList.add("typing-cursor");
+            typingIndex = 0;
+            isTyping = true;
+            indicator.style.opacity = 0;
+
+            if (typingTimer) clearInterval(typingTimer);
+
+            typingTimer = setInterval(() => {
+                if (typingIndex < currentFullText.length) {
+                    textBox.innerHTML += currentFullText.charAt(typingIndex);
+                    typingIndex++;
+                } else {
+                    finishTypingImmediately();
+                }
+            }, typingSpeed);
+        }
+
+        function finishTypingImmediately() {
+            clearInterval(typingTimer);
+            typingTimer = null;
+            textBox.innerHTML = currentFullText;
+            textBox.classList.remove("typing-cursor");
+            isTyping = false;
+            indicator.style.opacity = 0.6;
+        }
+
+        function jumpToId(targetId) {
+            const index = script.findIndex(item => item.id === targetId);
+            if (index !== -1) loadSceneByIndex(index);
+        }
+
+        function showChoices(choicesData) {
+            choiceLayer.innerHTML = '';
+            choiceLayer.style.display = 'flex';
+            choicesData.forEach(choice => {
+                const btn = document.createElement('div');
+                btn.className = 'choice-btn';
+                btn.innerText = choice.text;
+                btn.onclick = (e) => {
+                    e.stopPropagation();
+                    jumpToId(choice.targetId);
+                };
+                choiceLayer.appendChild(btn);
+            });
+        }
+
+        loadSceneByIndex(0);
+
+    </script>
+</body>
+</html>
